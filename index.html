@@ -379,7 +379,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 </head>
 <body>
-<div class="banner" style="margin:14px 22px 0;">Энэ бол зөвхөн унших горим (public mirror). Хувьцаа нэмэх, зорилтот үнэ тохируулах зэрэг засварыг <a href="https://claude.ai/artifact/WmxEkbi6urJv9hvSAA3nxS" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;">Claude dashboard</a> эсвэл Telegram bot дээр хийнэ үү.</div>
+<div class="banner" id="readonly-banner" style="margin:14px 22px 0;">Энэ бол зөвхөн унших горим (public mirror). Хувьцаа нэмэх, зорилтот үнэ тохируулах зэрэг засварыг <a href="https://claude.ai/artifact/WmxEkbi6urJv9hvSAA3nxS" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;">Claude dashboard</a>, Telegram bot, эсвэл 👤 icon дээр дараад нэвтэрсний дараа энд шууд хийнэ үү.</div>
 <div class="app">
   <aside class="sidebar">
     <div class="brand">
@@ -465,7 +465,7 @@
    ========================================================================= */
 var state = {
   holdings: [], watchlist: [], quotes: {}, indices: {}, news: [], history: {}, analytics: {},
-  profiles: {}, dividends: {}, fx: null, portfolioHistory: [], telegram: null, isOwner: false,
+  profiles: {}, dividends: {}, fx: null, portfolioHistory: [], telegram: null, isOwner: false, ownerEmail: null,
   currentView: "overview", currentTicker: null, currency: "USD",
   searchOpen: false, sortHoldings: null, sortMarkets: null, filterHoldings: "", filterWatchlist: "",
   sdRange: "3M", newsFilter: "all"
@@ -1077,6 +1077,12 @@ function renderSettings(){
   Object.keys(state.analytics).forEach(function(t){ if(!latestAnalytics || state.analytics[t].updatedAt>latestAnalytics) latestAnalytics=state.analytics[t].updatedAt; });
   return '<div class="view-head"><h1>Тохиргоо</h1></div>'+
     '<div class="settings-grid">'+
+      '<section><div class="head"><h2>Аккаунт</h2></div>'+
+        '<div class="setting-row"><span class="sr-label">Төлөв</span><span class="badge '+(state.isOwner?"b-pos":"b-muted")+'">'+(state.isOwner?"Нэвтэрсэн":"Нэвтрээгүй")+'</span></div>'+
+        (state.isOwner ? '<div class="setting-row"><span class="sr-label">Имэйл</span><span class="sr-sub">'+esc(state.ownerEmail||"")+'</span></div>' : '')+
+        '<div class="setting-row"><span class="sr-sub">'+(state.isOwner?"Одоо та энэ хуудаснаас шууд эзэмшил нэмэх, устгах, зорилтот үнэ тохируулах боломжтой.":"Дээд буланд байгаа 👤 icon дээр дараад имэйл/нууц үгээрээ нэвтэрвэл засварлах боломжтой болно.")+'</span></div>'+
+        '<div class="setting-row"><button class="btn'+(state.isOwner?" primary":"")+'" id="settings-auth-btn">'+(state.isOwner?"Гарах":"Нэвтрэх")+'</button></div>'+
+      '</section>'+
       '<section><div class="head"><h2>Харагдац</h2></div>'+
         '<div class="setting-row"><div><div class="sr-label">Theme</div><div class="sr-sub">Систем/гар сонголт</div></div>'+
         '<div class="seg" id="theme-seg">'+["system","light","dark"].map(function(v){ return '<button data-theme-choice="'+v+'" class="'+(themeChoice===v?"active":"")+'">'+({system:"Систем",light:"Цайвар",dark:"Бараан"})[v]+'</button>'; }).join("")+'</div></div>'+
@@ -1256,6 +1262,10 @@ function wireViewEvents(){
   document.querySelectorAll("[data-cur-choice]").forEach(function(b){
     b.addEventListener("click", function(){ setCurrency(b.getAttribute("data-cur-choice")); renderView(); });
   });
+  var settingsAuthBtn = document.getElementById("settings-auth-btn");
+  if (settingsAuthBtn) settingsAuthBtn.addEventListener("click", function(){
+    document.getElementById("auth-btn").click();
+  });
 }
 function wireRowNav(){
   document.querySelectorAll("[data-goto]").forEach(function(el){
@@ -1400,8 +1410,11 @@ function wireNav(){
 function updateAuthBtnUI(){
   var btn = document.getElementById("auth-btn");
   if (!btn) return;
-  btn.title = state.isOwner ? "Гарах" : "Нэвтрэх";
+  btn.title = state.isOwner ? "Нэвтэрсэн (" + (state.ownerEmail||"") + ") — гарах" : "Нэвтрэх";
   btn.style.color = state.isOwner ? "var(--pos)" : "";
+  btn.style.borderColor = state.isOwner ? "var(--pos)" : "";
+  var banner = document.getElementById("readonly-banner");
+  if (banner) banner.hidden = state.isOwner;
 }
 function wireAuth(){
   var modal = document.getElementById("auth-modal");
@@ -1429,6 +1442,7 @@ function wireAuth(){
   document.getElementById("auth-password").addEventListener("keydown", function(e){ if (e.key === "Enter") trySignIn(); });
   firebase.auth().onAuthStateChanged(function(user){
     state.isOwner = !!user;
+    state.ownerEmail = user ? user.email : null;
     updateAuthBtnUI();
     renderView();
   });
