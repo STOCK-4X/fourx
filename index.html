@@ -1410,7 +1410,7 @@ function wireNav(){
 function updateAuthBtnUI(){
   var btn = document.getElementById("auth-btn");
   if (!btn) return;
-  btn.title = state.isOwner ? "Нэвтэрсэн (" + (state.ownerEmail||"") + ") — гарах" : "Нэвтрэх";
+  btn.title = state.isOwner ? "Нэвтэрсэн (" + (state.ownerEmail||"") + ") — Профайл харах" : "Нэвтрэх";
   btn.style.color = state.isOwner ? "var(--pos)" : "";
   btn.style.borderColor = state.isOwner ? "var(--pos)" : "";
   var banner = document.getElementById("readonly-banner");
@@ -1420,7 +1420,7 @@ function wireAuth(){
   var modal = document.getElementById("auth-modal");
   document.getElementById("auth-btn").addEventListener("click", function(){
     if (state.isOwner){
-      firebase.auth().signOut();
+      navigate("settings");
     } else {
       document.getElementById("auth-err").textContent = "";
       modal.hidden = false;
