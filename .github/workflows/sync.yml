@@ -1,0 +1,25 @@
+name: Sync Firestore
+
+on:
+  schedule:
+    - cron: "3,33 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install --quiet firebase-admin
+
+      - name: Sync quotes, indices, news (and daily history/analytics/profiles/dividends/fx)
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+        run: python .github/scripts/sync_firestore.py

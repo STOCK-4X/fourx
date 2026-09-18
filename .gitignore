@@ -2,3 +2,5 @@
 !dashboard.html
 !index.html
 !.gitignore
+!.github/
+!.github/**
