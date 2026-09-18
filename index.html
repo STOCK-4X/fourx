@@ -376,6 +376,7 @@
 
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 </head>
 <body>
 <div class="banner" style="margin:14px 22px 0;">Энэ бол зөвхөн унших горим (public mirror). Хувьцаа нэмэх, зорилтот үнэ тохируулах зэрэг засварыг <a href="https://claude.ai/artifact/WmxEkbi6urJv9hvSAA3nxS" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;">Claude dashboard</a> эсвэл Telegram bot дээр хийнэ үү.</div>
@@ -417,6 +418,9 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
           <span class="dot-badge" id="alerts-dot" hidden></span>
         </button>
+        <button class="icon-btn" id="auth-btn" title="Нэвтрэх">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
+        </button>
       </div>
     </div>
 
@@ -440,6 +444,20 @@
   </div>
 </div>
 
+<div class="modal-backdrop" id="auth-modal" hidden>
+  <div class="modal-card">
+    <div class="head"><h2 style="margin:0;font-size:0.95rem;">Нэвтрэх</h2><button class="rm-btn" id="auth-close">×</button></div>
+    <div class="body">
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <input id="auth-email" type="email" placeholder="Имэйл" autocomplete="username" style="background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:8px 10px;color:var(--ink);font-size:0.88rem;" />
+        <input id="auth-password" type="password" placeholder="Нууц үг" autocomplete="current-password" style="background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:8px 10px;color:var(--ink);font-size:0.88rem;" />
+        <span class="err" id="auth-err" style="color:var(--neg);font-size:0.8rem;"></span>
+      </div>
+    </div>
+    <div class="foot"><button class="btn primary" id="auth-submit">Нэвтрэх</button></div>
+  </div>
+</div>
+
 <script>
 (function(){
 /* =========================================================================
@@ -447,7 +465,7 @@
    ========================================================================= */
 var state = {
   holdings: [], watchlist: [], quotes: {}, indices: {}, news: [], history: {}, analytics: {},
-  profiles: {}, dividends: {}, fx: null, portfolioHistory: [], telegram: null,
+  profiles: {}, dividends: {}, fx: null, portfolioHistory: [], telegram: null, isOwner: false,
   currentView: "overview", currentTicker: null, currency: "USD",
   searchOpen: false, sortHoldings: null, sortMarkets: null, filterHoldings: "", filterWatchlist: "",
   sdRange: "3M", newsFilter: "all"
@@ -700,7 +718,8 @@ function marketCardsHTML(){
 }
 
 function holdingsRowsHTML(limit){
-  if (!state.holdings.length) return '<tr class="empty-row"><td colspan="8">Одоогоор эзэмшил бүртгэгдээгүй байна.</td></tr>';
+  var colspan = state.isOwner ? 9 : 8;
+  if (!state.holdings.length) return '<tr class="empty-row"><td colspan="'+colspan+'">Одоогоор эзэмшил бүртгэгдээгүй байна.</td></tr>';
   var t = portfolioTotals();
   var filt = state.filterHoldings.trim().toUpperCase();
   var rows = state.holdings.filter(function(h){
@@ -720,7 +739,7 @@ function holdingsRowsHTML(limit){
     return va<vb?-1:(va>vb?1:0);
   });
   if (limit) rows = rows.slice(0, limit);
-  if (!rows.length) return '<tr class="empty-row"><td colspan="8">Тохирох үр дүн алга.</td></tr>';
+  if (!rows.length) return '<tr class="empty-row"><td colspan="'+colspan+'">Тохирох үр дүн алга.</td></tr>';
   return rows.map(function(h){
     var q = state.quotes[h.ticker];
     var price = q ? q.price : null;
@@ -739,12 +758,14 @@ function holdingsRowsHTML(limit){
       '<td class="num">'+fmtUSD(mv)+'</td>'+
       '<td class="num '+clsFor(pl)+'">'+fmtUSD(pl,{forceSign:true})+' <span style="font-size:0.74rem;">('+fmtPct(plPct)+')</span></td>'+
       '<td class="num">'+alloc.toFixed(1)+'%</td>'+
+      (state.isOwner ? '<td><button class="rm-btn" data-rm-holding="'+esc(h.ticker)+'" title="Устгах">×</button></td>' : '')+
       '</tr>';
   }).join("");
 }
 
 function watchlistRowsHTML(limit){
-  if (!state.watchlist.length) return '<tr class="empty-row"><td colspan="6">Жагсаалт хоосон байна.</td></tr>';
+  var colspan = state.isOwner ? 7 : 6;
+  if (!state.watchlist.length) return '<tr class="empty-row"><td colspan="'+colspan+'">Жагсаалт хоосон байна.</td></tr>';
   var filt = state.filterWatchlist.trim().toUpperCase();
   var rows = state.watchlist.filter(function(w){
     if (!filt) return true;
@@ -752,7 +773,7 @@ function watchlistRowsHTML(limit){
     return w.ticker.indexOf(filt)!==-1 || name.toUpperCase().indexOf(filt)!==-1;
   }).slice().sort(function(a,b){ return a.ticker<b.ticker?-1:1; });
   if (limit) rows = rows.slice(0, limit);
-  if (!rows.length) return '<tr class="empty-row"><td colspan="6">Тохирох үр дүн алга.</td></tr>';
+  if (!rows.length) return '<tr class="empty-row"><td colspan="'+colspan+'">Тохирох үр дүн алга.</td></tr>';
   return rows.map(function(w){
     var q = state.quotes[w.ticker];
     var name = q&&q.name?q.name:"";
@@ -764,13 +785,17 @@ function watchlistRowsHTML(limit){
       else if (distPct<=3){ rowCls="target-near"; statusBadge='<span class="badge b-warn">ОЙРТОЖ БАЙНА</span>'; }
       else { statusBadge='<span class="badge b-muted">ХОЛ БАЙНА</span>'; }
     }
+    var targetCell = state.isOwner
+      ? '<div class="target-cell"><input type="number" min="0" step="0.01" placeholder="—" data-target-ticker="'+esc(w.ticker)+'" value="'+(hasTarget?w.targetPrice:"")+'" /></div>'
+      : (hasTarget?fmtUSD(w.targetPrice):"—");
     return '<tr class="'+rowCls+'">'+
       '<td class="clickable" data-goto="'+esc(w.ticker)+'"><div class="ticker-cell"><span class="t">'+esc(w.ticker)+'</span>'+(name?'<span class="n">'+esc(name)+'</span>':'')+'</div></td>'+
       '<td class="num">'+(q?fmtUSD(q.price):"—")+'</td>'+
       '<td><span class="chg-pill num '+(q?clsFor(q.changePercent):"flat")+'">'+(q?fmtPct(q.changePercent):"—")+'</span></td>'+
-      '<td class="num">'+(hasTarget?fmtUSD(w.targetPrice):"—")+'</td>'+
+      '<td class="num">'+targetCell+'</td>'+
       '<td class="num">'+(distPct!=null?fmtPct(distPct):"—")+'</td>'+
       '<td>'+statusBadge+'</td>'+
+      (state.isOwner ? '<td><button class="rm-btn" data-rm-watch="'+esc(w.ticker)+'" title="Устгах">×</button></td>' : '')+
       '</tr>';
   }).join("");
 }
@@ -914,8 +939,15 @@ function renderPortfolio(){
       '<input id="filter-holdings" placeholder="Шүүх…" value="'+esc(state.filterHoldings)+'" style="background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:6px 10px;color:var(--ink);font-size:0.82rem;" />'+
       '</div><div class="tbl-wrap"><table><thead><tr>'+
         '<th class="sortable" data-sort="ticker">Ticker</th><th>Тренд</th><th>Тоо</th><th>Дундаж өртөг</th><th>Ханш</th><th>Өдөр</th>'+
-        '<th class="sortable" data-sort="mv">Зах зээлийн үнэ</th><th class="sortable" data-sort="pl">Ашиг/алдагдал</th><th>Эзлэх хувь</th>'+
-      '</tr></thead><tbody id="holdings-body">'+holdingsRowsHTML()+'</tbody></table></div></section>'+
+        '<th class="sortable" data-sort="mv">Зах зээлийн үнэ</th><th class="sortable" data-sort="pl">Ашиг/алдагдал</th><th>Эзлэх хувь</th>'+(state.isOwner?'<th></th>':'')+
+      '</tr></thead><tbody id="holdings-body">'+holdingsRowsHTML()+'</tbody></table></div>'+
+      (state.isOwner ? '<form class="add-row" id="holding-form">'+
+        '<input id="f-ticker" placeholder="TICKER" maxlength="8" required autocomplete="off" />'+
+        '<input id="f-shares" type="number" step="any" min="0" placeholder="Тоо ширхэг" required />'+
+        '<input id="f-cost" type="number" step="any" min="0" placeholder="Дундаж өртөг ($)" required />'+
+        '<button type="submit">+ Нэмэх</button><span class="err" id="holding-err"></span>'+
+      '</form>' : '')+
+    '</section>'+
     footerHTML();
 }
 
@@ -924,8 +956,13 @@ function renderWatchlist(){
   return '<div class="view-head"><h1>Ажиглах жагсаалт</h1><span class="vh-sub">Зорилтот үнэ тохируулахад ойртоход Claude dashboard болон Telegram-аар мэдэгдэнэ</span></div>'+
     '<section><div class="head"><h2>Ажиглах жагсаалт</h2>'+
       '<input id="filter-watchlist" placeholder="Шүүх…" value="'+esc(state.filterWatchlist)+'" style="background:var(--surface-2);border:1px solid var(--border);border-radius:5px;padding:6px 10px;color:var(--ink);font-size:0.82rem;" />'+
-      '</div><div class="tbl-wrap"><table><thead><tr><th>Ticker</th><th>Ханш</th><th>24ц</th><th>Зорилт</th><th>Зай</th><th>Төлөв</th></tr></thead>'+
-      '<tbody id="watchlist-body">'+watchlistRowsHTML()+'</tbody></table></div></section>'+
+      '</div><div class="tbl-wrap"><table><thead><tr><th>Ticker</th><th>Ханш</th><th>24ц</th><th>Зорилт</th><th>Зай</th><th>Төлөв</th>'+(state.isOwner?'<th></th>':'')+'</tr></thead>'+
+      '<tbody id="watchlist-body">'+watchlistRowsHTML()+'</tbody></table></div>'+
+      (state.isOwner ? '<form class="add-row" id="watch-form">'+
+        '<input id="wf-ticker" placeholder="TICKER нэмэх" maxlength="8" required autocomplete="off" />'+
+        '<button type="submit">+ Нэмэх</button><span class="err" id="watch-err"></span>'+
+      '</form>' : '')+
+    '</section>'+
     footerHTML();
 }
 
@@ -1360,6 +1397,43 @@ function wireNav(){
   document.getElementById("alerts-btn").addEventListener("click", function(){ navigate("watchlist"); });
 }
 
+function updateAuthBtnUI(){
+  var btn = document.getElementById("auth-btn");
+  if (!btn) return;
+  btn.title = state.isOwner ? "Гарах" : "Нэвтрэх";
+  btn.style.color = state.isOwner ? "var(--pos)" : "";
+}
+function wireAuth(){
+  var modal = document.getElementById("auth-modal");
+  document.getElementById("auth-btn").addEventListener("click", function(){
+    if (state.isOwner){
+      firebase.auth().signOut();
+    } else {
+      document.getElementById("auth-err").textContent = "";
+      modal.hidden = false;
+    }
+  });
+  document.getElementById("auth-close").addEventListener("click", function(){ modal.hidden = true; });
+  modal.addEventListener("click", function(e){ if (e.target === modal) modal.hidden = true; });
+  function trySignIn(){
+    var email = document.getElementById("auth-email").value.trim();
+    var pw = document.getElementById("auth-password").value;
+    var errEl = document.getElementById("auth-err");
+    errEl.textContent = "";
+    firebase.auth().signInWithEmailAndPassword(email, pw).then(function(){
+      modal.hidden = true;
+      document.getElementById("auth-password").value = "";
+    }).catch(function(err){ errEl.textContent = "Нэвтрэх амжилтгүй: " + err.message; });
+  }
+  document.getElementById("auth-submit").addEventListener("click", trySignIn);
+  document.getElementById("auth-password").addEventListener("keydown", function(e){ if (e.key === "Enter") trySignIn(); });
+  firebase.auth().onAuthStateChanged(function(user){
+    state.isOwner = !!user;
+    updateAuthBtnUI();
+    renderView();
+  });
+}
+
 /* =========================================================================
    7. DATA LAYER (db subscriptions -> state -> re-render)
    ========================================================================= */
@@ -1378,6 +1452,7 @@ async function initData(){
   try {
     firebase.initializeApp(FIREBASE_CONFIG);
     db = firebase.firestore();
+    wireAuth();
   } catch (e) {
     document.getElementById("views").innerHTML = '<div class="view"><div class="banner">Firestore-той холбогдож чадсангүй — хуудсыг дахин ачаална уу.</div></div>';
     return;
